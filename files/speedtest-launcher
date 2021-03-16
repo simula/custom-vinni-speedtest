@@ -178,7 +178,7 @@ while True:
                                                        '--server', str(12919)
                                                      ])
             process.wait()
-            time.sleep(5)
+            time.sleep(570)
          if networkID != 6:
             logging.debug('Started instance ' + str(measurementID) + ' on ' + metadataIF)
 
