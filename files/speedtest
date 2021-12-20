@@ -51,29 +51,12 @@ from collections import OrderedDict
 from datetime    import datetime
 
 
-
-# ###### Constants ##########################################################
-NET_MAP = {
-    1: '24201',
-    2: '24202',
-    4: '24205',
-    5: '24206',
-    6: '00000',
-   15: '24205',
-   18: '24214',
-   19: '24219',
-    0: '00000'   # Test only!
-}
-
 LOG_DIRECTORY  = '/monroe/results/log'
 DATA_DIRECTORY = '/monroe/results'
-
 
 # ###### Global variables ###################################################
 running  = True
 compress = True
-cwd      = os.path.dirname(os.path.realpath(sys.argv[0]))
-
 
 # ###### Scheduling #########################################################
 class At(object):
@@ -104,8 +87,6 @@ def signalHandler(signum, frame):
 
 # ###### Run test ###########################################################
 def run(cmds):
-   global cwd
-   env = dict(os.environ)
    res = OrderedDict()
    try:
       sip = netifaces.ifaddresses(options.iface)[netifaces.AF_INET][0]['addr']
@@ -113,18 +94,13 @@ def run(cmds):
       sys.stderr.write('ERROR: Unable to determine IP address of interface ' + options.iface + '!\n')
       return
 
-   env['LD_PRELOAD']  = '%s/bind.so.%s' % ( cwd, platform.machine() )
-   env['BIND_ADDR']   = sip
-   env['NAMESERVER1'] = '8.8.8.8'
-   env['PATH']        = '%s:%s' % ( env['PATH'], cwd )
-
    seqnum = 0
 
    for cmd in cmds:
       now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')
       try:
          cmd_name, cmd_args = cmd
-         proc = subprocess.Popen(cmd_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+         proc = subprocess.Popen(cmd_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
          stdout, stderr = proc.communicate()
 
          # ------ Get result (parse JSON) -----------------------------------
@@ -177,8 +153,6 @@ def run(cmds):
             'exitMessage': str(e)
          }
 
-      # print(cmd)
-      # print(res)
 
    # ------ Write the results -----------------------------------------------
    jsonDump = json.dumps(res)
@@ -200,8 +174,6 @@ def CompressingRotator(source, dest):
    f_in.close()
    os.remove(dest)
 
-
-
 # ###### Main program #######################################################
 
 # ====== Handle arguments ===================================================
@@ -210,26 +182,14 @@ ap.add_argument('-i', '--instance',     help='Measurement instance ID',      typ
 ap.add_argument('-N', '--network_id',   help='Network identifier',           required=True, type=int, default=None)
 ap.add_argument('-I', '--iface',        help='Interface name',               required=True)
 ap.add_argument('-u', '--uncompressed', help='Turn off results compression', action='store_true', default=False)
-ap.add_argument('--once',   help='Run tests once, then exit',   type=int, default=0)
-ap.add_argument('--coords', help='GPS coordinates: LAT,LON',    default='59.913869,10.752245')   # Oslo sentrum
-ap.add_argument('--server', help='Speedtest server ID', 		    default=None, type=int)
-ap.add_argument('--url1',   help='URL #1 to fetch',             default='https://m.nrk.no/')
-ap.add_argument('--url2',   help='URL #2 to fetch',             default='https://www.vg.no/')
-ap.add_argument('--hour',   type=int, nargs='+', required=False, default=[ 1, 13, 18 ])
-ap.add_argument('--minute', type=int, nargs='+', required=False, default=[ 0 ])
+ap.add_argument('--once',   help='Run tests once, then exit',   action='store_true', default=False)
+ap.add_argument('--server', help='Speedtest server ID',                     default=None, type=int)
+ap.add_argument('--hour',   type=int, nargs='+', required=True, default=[ 1, 13, 18 ])
+ap.add_argument('--minute', type=int, nargs='+', required=True, default=[ 0 ])
 options = ap.parse_args()
 
 if options.uncompressed == True:
    compress = False
-
-try:
-   mccmnc = NET_MAP[options.network_id]
-except:
-   print(NET_MAP)
-   print(options.network_id)
-   sys.stderr.write('ERROR: Invalid network identifier (not in NET_MAP)!\n')
-   sys.exit(1)
-
 
 # ====== Initialise logger ==================================================
 MBBM_LOGGING_CONF = {
@@ -287,15 +247,11 @@ signal.signal(signal.SIGTERM, signalHandler)
 # ====== Run the tests ======================================================
 if options.server:
    cmds = [
-      ( 'metadatab', [ 'wrap-nne-query-metadata', mccmnc ] ),
-      ( 'speedtest', [ 'speedtest_cli-0.3.4', '--simple', '--json', '--coords', options.coords ,'--server', str(options.server) ] ),
-      ( 'metadataa', [ 'wrap-nne-query-metadata', mccmnc ] )
+      ('speedtest',['speedtest','-I', options.iface, '--accept-license', '-s', str(options.server), '-f', 'json'])
    ]
 else:
    cmds = [
-      ( 'metadatab', [ 'wrap-nne-query-metadata', mccmnc ] ),
-      ( 'speedtest', [ 'speedtest_cli-0.3.4', '--simple', '--json', '--coords', options.coords ] ),
-      ( 'metadataa', [ 'wrap-nne-query-metadata', mccmnc ] )
+      ('speedtest',['speedtest','-I', options.iface, '--accept-license', '-f', 'json'])
    ]
 
 if not options.once:
